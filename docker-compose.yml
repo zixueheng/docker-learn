@@ -1,0 +1,37 @@
+version: "3.8"
+services:
+    app: # 此名会以前缀的方式加到 网络和卷名前面
+        image: node:12-alpine
+        container_name: nodejs-todo-app
+        command: sh -c "yarn install && yarn run dev"
+        networks: 
+            - todo-app
+        ports:
+            - 3000:3000
+        working_dir: /app
+        volumes:
+            - ./:/app
+        environment:
+            MYSQL_HOST: mysql
+            MYSQL_USER: root
+            MYSQL_PASSWORD: secret
+            MYSQL_DB: todos
+
+    mysql:
+        image: mysql:5.7
+        container_name: todo-mysql
+        networks: 
+            - todo-app
+        # networks: 
+        #     todo-app:
+        #         aliases: mysql
+        volumes:
+            - todo-mysql:/var/lib/mysql
+        environment: 
+            MYSQL_ROOT_PASSWORD: secret
+            MYSQL_DATABASE: todos
+  
+volumes:
+    todo-mysql: # 实际名：app_todo-mysql
+networks: 
+    todo-app: # 实际名：app_todo-app
