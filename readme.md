@@ -197,3 +197,141 @@ docker-compose down
 ```shell
 docker-compose down --volumes
 ```
+
+# 镜像层（Image Layering）
+使用命令
+```shell
+docker image history getting-started
+```
+查看镜像的组成
+```dockerfile
+FROM node:12-alpine
+WORKDIR /app
+COPY . .
+RUN yarn install --production
+CMD ["node", "/app/src/index.js"]
+```
+`Dockerfile`的每条命令都会形成一个层，如果对镜像做一些更改，`yarn`依赖就会从新安装，相同的依赖每次重新安装是没有意义的。
+
+## 层缓存（Layer Caching）
+使用层缓存有助于大量减少镜像的构建时间。
+**要领：当一个层改变时，它下游的所有层都得重建**
+对于NodeJS项目，依赖是定义在`package.json`文件中的，所以我们先拷贝这个文件，然后`yarn`安装依赖，再拷贝其他所有的文件，当再次重构时，只要`package.json`文件内容不改变，`yarn`依赖就不需要重新安装。
+
+1. 增加 `.dockerignore` 文件忽略一些文件或文件夹
+```dockerignore
+node_modules
+```
+
+2. 更改`Dockerfile`
+```dockerfile
+FROM node:12-alpine
+WORKDIR /app
+# 先拷贝下面两个文件，只要这两个文件不改变，下面的命令就可以使用缓存
+COPY package.json yarn.lock ./ 
+# 然后执行安装依赖
+RUN yarn install --production
+# 再拷贝所有文件（但是排除了 node_modules）
+COPY . .
+CMD ["node", "/app/src/index.js"]
+```
+
+3. 开始构建镜像
+```shell
+docker build -t getting-started .
+```
+可以看到构建过程顺利完成。
+
+4. 修改一下代码再次构建镜像
+会发现构建速度非常的快，2 3 4 步骤使用了缓存
+```log
+Sending build context to Docker daemon  6.708MB
+Step 1/6 : FROM node:12-alpine
+ ---> 057fa4cc38c2
+Step 2/6 : WORKDIR /app
+ ---> Using cache
+ ---> c035f0e4ded5
+Step 3/6 : COPY package.json yarn.lock ./
+ ---> Using cache
+ ---> b83ff29b7e78
+Step 4/6 : RUN yarn install --production
+ ---> Using cache
+ ---> 5f81002a575d
+Step 5/6 : COPY . .
+ ---> b345c671f2c6
+Step 6/6 : CMD ["node", "/app/src/index.js"]
+ ---> Running in 7c88dec5ab33
+Removing intermediate container 7c88dec5ab33
+ ---> d5adee825c69
+Successfully built d5adee825c69
+Successfully tagged getting-started:latest
+```
+如果`package.josn`文件改变，例如 安装了一些东西 `yarn install md5`
+构建镜像时，只有步骤2使用了缓存，步骤3和以下都常规执行
+```log
+Sending build context to Docker daemon   6.71MB
+Step 1/6 : FROM node:12-alpine
+ ---> 057fa4cc38c2
+Step 2/6 : WORKDIR /app
+ ---> Using cache
+ ---> c035f0e4ded5
+Step 3/6 : COPY package.json yarn.lock ./
+ ---> f788bc2ec6a2
+Step 4/6 : RUN yarn install --production
+ ---> Running in 6001ed32d886
+yarn install v1.22.4
+[1/4] Resolving packages...
+[2/4] Fetching packages...
+info fsevents@1.2.9: The platform "linux" is incompatible with this module.
+info "fsevents@1.2.9" is an optional dependency and failed compatibility check. Excluding it from installation.
+[3/4] Linking dependencies...
+[4/4] Building fresh packages...
+Done in 147.16s.
+Removing intermediate container 6001ed32d886
+ ---> f46ac6cf91db
+Step 5/6 : COPY . .
+ ---> 86d3d3a59934
+Step 6/6 : CMD ["node", "/app/src/index.js"]
+ ---> Running in 77ee4c3acb68
+Removing intermediate container 77ee4c3acb68
+ ---> 4ab7dccf8a89
+Successfully built 4ab7dccf8a89
+Successfully tagged getting-started:latest
+```
+
+# 多阶段构建（Multi-Stage Builds）
+我们一般构建项目镜像时，可能往往将源码和编译时的依赖也构建进去，这样是不安全也不必要的，编译阶段需要的，生成环境不一定需要。例如`Golang`的应用，编译环境包括源码或go运行时环境，放到生成环境只需要编译后的二进制文件而不需要源码和GO运行环境。
+
+所以常见的配置模式为：分别为软件的编译环境和运行环境提供不同的容器镜像。比如为编译环境提供一个 `Dockerfile.build`，用它构建的镜像包含了编译软件需要的所有内容，比如代码、SDK、工具等等。同时为软件的运行环境提供另外一个单独的 `Dockerfile`，它从 `Dockerfile.build` 中获得编译好的软件，用它构建的镜像只包含运行软件所必须的内容。这种情况被称为构造者模式(`builder pattern`)。
+参考示例：https://github.com/sparkdevo/href-counter
+
+可以使用`Dockerfile`的多阶段构建简化配置
+```dockerfile
+FROM golang:1.7.3 as builder
+WORKDIR /go/src/github.com/sparkdevo/href-counter/
+RUN go get -d -v golang.org/x/net/html
+COPY app.go	.
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app .
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+COPY --from=builder /go/src/github.com/sparkdevo/href-counter/app .
+CMD ["./app"]
+```
+执行镜像构建
+```shell
+docker build -t app:latest .
+```
+您可以指定目标构建阶段。以下命令假定您使用的是以前的Dockerfile，但在名为builder的阶段停止：
+```shell
+docker build --target builder -t zixueheng/href-counter:latest .
+```
+
+使用外部镜像作为stage
+使用多阶段构建时，您不仅可以从`Dockerfile`中创建的镜像中进行复制。
+您还可以使用`COPY –from`指令从单独的image中复制，使用本地image名称，本地或`Docker`注册表中可用的标记或标记ID。
+如有必要，`Docker`会提取image并从那里开始复制。
+```shell
+COPY --from=nginx:latest /etc/nginx/nginx.conf /nginx.conf
+```
