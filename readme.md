@@ -18,7 +18,7 @@ FROM指定要使用的源镜像，WORKDIR指定容器内的工作目录，COPY�
 
 2. 构建镜像
 在 `Dockerfile` 同路径 执行命令：
-```shell
+```bash
 docker build -t getting-started .
 ```
 该命令会使用 `Dockerfile` 构建镜像，
@@ -26,7 +26,7 @@ docker build -t getting-started .
 - . ：`Dockerfile` 文件所在目录，可以指定`Dockerfile` 的绝对路径
 
 ## 使用创建的镜像运行一个容器
-```shell
+```bash
 docker run -dp 3000:3000 --name app-test getting-started
 ```
 -d 指定容器在后台运行 -p指定端口映射 主机端口:容器内端口 --name 指定容器名称
@@ -51,11 +51,11 @@ Docker使用 卷（volumes）将容器的特定文件系统路径连接回主机
 ## 命名卷
 命名卷可以看作是一个简单的数据桶。Docker维护磁盘上的物理位置，您只需记住卷的名称。每次使用卷时，Docker都会确保提供正确的数据。
 1. 创建命名卷
-```shell
+```bash
 docker volume create todo-db
 ```
 2. 启动容器，使用 -v 指定券名
-```shell
+```bash
 docker run -dp 3000:3000 -v todo-db:/etc/todos --name app-test getting-started
 ```
 -v 格式：要使用的卷名:容器内挂载到的文件
@@ -63,7 +63,7 @@ docker run -dp 3000:3000 -v todo-db:/etc/todos --name app-test getting-started
 # 绑定挂载（Bind Mounts）
 处于开发应用状态时，使用绑定挂载 将主机上的源代码 挂载到 容器中，这样 在本机上修改代码时 容器也能获得更改
 ## 启动一个开发模式的容器
-```shell
+```bash
 docker run -dp 3000:3000 `
     -w /app -v ${PWD}:/app `
     --name app-test `
@@ -87,11 +87,11 @@ APP运行在一个容器中、数据库(mysql)运行在一个容器中。
 
 ## 启动MYSQL
 1. 创建网络 network
-```shell
+```bash
 docker network create todo-app
 ```
 2. 启动Mysql
-```shell
+```bash
 docker run -d `
     --network todo-app --network-alias mysql `
     --name todo-mysql `
@@ -105,7 +105,7 @@ docker run -d `
 - -e 指定一些环境变量用来初始化 mysql 容器
 
 3. 进入mysql
-```shell
+```bash
 docker exec -it <mysql-container-id> mysql -p
 ```
 进入mysql可看到 数据库名todos已创建
@@ -117,7 +117,7 @@ APP应用支持一些环境变量：
 - MYSQL_PASSWORD - the password to use for the connection
 - MYSQL_DB - the database to use once connected
 注意：开发环境可以使用环境变量，但是生产环境不建议使用（正常方式应该将这些敏感信息存放到系统配置文件中进行加载）
-```shell
+```bash
 docker run -dp 3000:3000 `
   -w /app -v ${PWD}:/app `
   --network todo-app `
@@ -182,7 +182,7 @@ volumes:
 ## 运行应用栈
 先确保上面的容器服务已经删除（防止端口占用的情况）。
 
-```shell
+```bash
 docker-compose up -d
 ```
 -d 表示后台启动
@@ -190,17 +190,17 @@ docker-compose up -d
 注意：APP启动时会连接数据库3306端口，而mysql不一定能在它之前启动好，所以APP需要等待3306端口准备好，这里的NodeJS应用使用了 `wait-port` 依赖来实现等待端口，其他语言的框架也应该有类似的工具。
 
 ## 移除应用栈
-```shell
+```bash
 docker-compose down
 ```
 这会移除所有容器，网络也会一并移除，但是卷不会移除，可以 加 --volumes 移除卷
-```shell
+```bash
 docker-compose down --volumes
 ```
 
 # 镜像层（Image Layering）
 使用命令
-```shell
+```bash
 docker image history getting-started
 ```
 查看镜像的组成
@@ -237,7 +237,7 @@ CMD ["node", "/app/src/index.js"]
 ```
 
 3. 开始构建镜像
-```shell
+```bash
 docker build -t getting-started .
 ```
 可以看到构建过程顺利完成。
@@ -320,11 +320,11 @@ COPY --from=builder /go/src/github.com/sparkdevo/href-counter/app .
 CMD ["./app"]
 ```
 执行镜像构建
-```shell
+```bash
 docker build -t app:latest .
 ```
 您可以指定目标构建阶段。以下命令假定您使用的是以前的Dockerfile，但在名为builder的阶段停止：
-```shell
+```bash
 docker build --target builder -t zixueheng/href-counter:latest .
 ```
 
@@ -332,6 +332,6 @@ docker build --target builder -t zixueheng/href-counter:latest .
 使用多阶段构建时，您不仅可以从`Dockerfile`中创建的镜像中进行复制。
 您还可以使用`COPY –from`指令从单独的image中复制，使用本地image名称，本地或`Docker`注册表中可用的标记或标记ID。
 如有必要，`Docker`会提取image并从那里开始复制。
-```shell
+```bash
 COPY --from=nginx:latest /etc/nginx/nginx.conf /nginx.conf
 ```
