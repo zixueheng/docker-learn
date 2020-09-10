@@ -171,6 +171,10 @@ services:
      mysql: # 数据库服务，它会自动获取网络别名(network alias)
         image: mysql:5.7
         container_name: todo-mysql
+        command:
+            - --default_authentication_plugin=mysql_native_password
+            - --character-set-server=utf8mb4
+            - --collation-server=utf8mb4_unicode_ci   
         volumes:
             - todo-mysql:/var/lib/mysql # 命名卷不会自动创建，所以要在下面创建
         environment: 
